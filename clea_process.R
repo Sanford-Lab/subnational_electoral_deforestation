@@ -1,14 +1,10 @@
-source("../code/support.R")
+library(tidyverse)
+
 load("../data/clea/clea_lc_20201216.rdata")
 
 #Competitiveness Measure I
 closeness_i <- function(vec){
     return((1 - (sort(vec, decreasing = TRUE)[1] - sort(vec, decreasing = TRUE)[2]))*100)
-}
-
-#Competitiveness Measure II; Votes - 50
-closeness_ii <- function(vec){
-    return(1 - max(vec))
 }
 
 clea_final <- clea_lc_20201216 %>%
@@ -26,9 +22,9 @@ pvs_fix <- clea_final %>%
 
 clea_final <- clea_final %>% filter(!(id %in% fixes))
 clea_final <- bind_rows(clea_final,pvs_fix) %>% 
-        mutate(comp_i = round(closeness_i(pvs1),2), comp_ii = round(closeness_ii(pvs1),2)) %>% 
-        distinct(id, cst, .keep_all = TRUE) %>%
-        select(release,id,rg,ctr_n,ctr,yr,mn,sub,cst_n,cst,mag,comp_i,comp_ii)
+    mutate(comp_i = round(closeness_i(pvs1),2)) %>% 
+    distinct(id, cst, .keep_all = TRUE) %>%
+    select(release,id,rg,ctr_n,ctr,yr,mn,sub,cst_n,cst,mag,comp_i)
 
 #Subset to only GRED-valid observations (We will hardcode remove Sweden, US, Brazil invalid years below)
 #Valid IDs ----
@@ -67,6 +63,24 @@ clea_final <- clea_final %>%
 
 #Clean Up ----
 rm(clea_lc_20201216,pvs_fix)
+
+#Incumbent == winner:
+incumbents <- clea_lc_20220908 %>%
+    group_by(ctr, cst, yr) %>%
+    mutate(winner = pty_n[which.max(pvs1)]) %>%
+    distinct(ctr, cst, yr, .keep_all = TRUE) %>%
+    arrange(yr, .by_group = TRUE) %>%
+    group_by(ctr,cst) %>%
+    mutate(incumbent = dplyr::lag(winner), incumb_reelec = ifelse(winner == incumbent,1,0)) %>%
+    ungroup() %>%
+    select(id,cst,winner,incumbent,incumb_reelec)
+
+#Incumbent party vote share:
+incumbent_pvs <- clea_lc_20220908 %>% 
+    left_join(incumbents,by=c("id","cst")) %>%
+    filter(pty_n == incumbent) %>%
+    mutate(winner_pvs = pvs1) %>%
+    select(id,cst,pvs1)
 
 #save(clea_final,file="../data/processed/clea_final.RData")
 
