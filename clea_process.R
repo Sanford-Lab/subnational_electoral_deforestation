@@ -2,32 +2,29 @@ library(tidyverse)
 
 load("../data/clea/clea_lc_20201216.rdata")
 
-#Competitiveness Measure I
+#Competitiveness Measure
 closeness_i <- function(vec){
-    return((1 - (sort(vec, decreasing = TRUE)[1] - sort(vec, decreasing = TRUE)[2]))*100)
+    return((1 - (sort(vec, decreasing = TRUE)[1] - sort(vec, decreasing = TRUE)[2])))
 }
-
-clea_final <- clea_lc_20201216 %>%
-    group_by(ctr, cst, yr) %>%
-    mutate(pvs1 = replace(pvs1,pvs1<0,NA))
 
 fixes <- c(1171,1410,1411,1785,1235,1236,1237,1238,1239,1240,
            1241,1242,1243,1244,1245,1246,1449,1450,1451,452,
            1616,1617,1875)
 
-pvs_fix <- clea_final %>% 
+pvs_fix <- clea_lc_20201216 %>% 
     filter(id %in% fixes) %>% 
     group_by(id,cst) %>% 
-    mutate(pvs1 = (pv1/sum(pv1)))
+    mutate(pvs1 = replace(pvs1,pvs1<0,NA),
+           pvs1 = (pv1/sum(pv1)))
 
-clea_final <- clea_final %>% filter(!(id %in% fixes))
-clea_final <- bind_rows(clea_final,pvs_fix) %>% 
+clea <- clea_lc_20201216 %>% 
+    filter(!(id %in% fixes)) %>%
+    bind_rows(clea_final,pvs_fix) %>% 
     mutate(comp_i = round(closeness_i(pvs1),2)) %>% 
     distinct(id, cst, .keep_all = TRUE) %>%
     select(release,id,rg,ctr_n,ctr,yr,mn,sub,cst_n,cst,mag,comp_i)
 
 #Subset to only GRED-valid observations (We will hardcode remove Sweden, US, Brazil invalid years below)
-#Valid IDs ----
 valid_ids <- c(1619,1683,1016,719,720,721,722,723,724,725,1018,1019,1132,1351,1352,1687,1361,81,82,83,84,85,86,1138,
                894,895,147,1152,1153,1156,1157,1841,1369,7,8,9,10,11,12,13,14,15,16,17,18,19,1163,1372,1531,1532,1533,
                1534,1843,1167,1168,1169,1373,1374,1780,20,970,1377,1378,1379,1380,1537,1383,1384,1385,1386,1387,1388,
@@ -55,14 +52,13 @@ valid_ids <- c(1619,1683,1016,719,720,721,722,723,724,725,1018,1019,1132,1351,13
 
 load("../data/processed/gred_yr.Rdata")
 
-clea_final <- clea_final %>% 
+clea <- clea %>% 
     filter((id %in% valid_ids),!(ctr==752 & yr<1952),!(ctr==840 & yr<1900)) %>% 
     left_join(gred_yr) %>%
     mutate(GRED_yr=ifelse(is.na(GRED_yr),yr,GRED_yr)) %>%
     left_join(clea_nat)
 
-#Clean Up ----
-rm(clea_lc_20201216,pvs_fix)
+
 
 #Incumbent == winner:
 incumbents <- clea_lc_20220908 %>%
@@ -76,11 +72,26 @@ incumbents <- clea_lc_20220908 %>%
     select(id,cst,winner,incumbent,incumb_reelec)
 
 #Incumbent party vote share:
-incumbent_pvs <- clea_lc_20220908 %>% 
+incumbency <- clea_lc_20220908 %>% 
     left_join(incumbents,by=c("id","cst")) %>%
     filter(pty_n == incumbent) %>%
-    mutate(winner_pvs = pvs1) %>%
-    select(id,cst,pvs1)
+    mutate(incumbent_vs = pvs1) %>%
+    select(id,cst,winner,incumbent,incumb_reelec,incumbent_vs)
+
+clea_final <- clea %>% left_join(incumbency)
+
+clea_nat <- clea_lc_20220908 %>%
+    filter(seat > 0) %>%
+    group_by(id,pty) %>%
+    mutate(sum_seat = sum(seat), sum_nat_votes = sum(pv1)) %>%
+    distinct(id,pty,.keep_all=TRUE) %>%
+    group_by(id) %>%
+    mutate(frac_house = sum_seat/sum(sum_seat),
+           totvs = sum_nat_votes/sum(sum_nat_votes),
+           comp_leg = round(closeness_i(frac_house),2),
+           comp_tvs = round(closeness_i(totvs),2)) %>%
+    distinct(id,.keep_all = TRUE) %>%
+    select(id,comp_leg,comp_tvs)
 
 #save(clea_final,file="../data/processed/clea_final.RData")
 

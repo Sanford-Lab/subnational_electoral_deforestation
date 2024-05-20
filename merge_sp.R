@@ -2,7 +2,7 @@
 library(sf)
 library(tidyverse)
 
-#Join Geometries onto Electoral Data ----
+#Join Geometries onto Electoral Data
 load("~/project/data/processed/clea_final.RData")
 
 #Load in GRED data

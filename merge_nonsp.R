@@ -1,4 +1,7 @@
-source("../code/support.R")
+library(tidyverse)
+library(countrycode)
+library(sf)
+
 load("../data/processed/df_out.RData")
 
 # LOAD IN DATAFRAMES ----
@@ -45,7 +48,7 @@ wdi <- wdi %>%
     filter(!is.na(ctr))
 
 vdem <- readRDS("../data/VDEM/V-Dem-CY-Core-v12.rds") %>% 
-    select(country_name,country_id,year,v2dlencmps,v2elvotbuy,v2x_polyarchy,v2xel_locelec,v2excrptps) %>% 
+    select(country_name,country_id,year,v2x_polyarchy,v2excrptps,v2xnp_client) %>% 
     mutate(ctr=countrycode(country_id,origin="vdem",destination="un",warn=FALSE),yr=year) %>%
     select(-c(country_id,country_name,year)) %>%
     filter(!is.na(ctr))
@@ -63,19 +66,19 @@ final <- final %>% mutate(cst_uniq = paste0(cst,"-",ctr))
 
 final <- final %>% 
     mutate(mag = replace(mag,mag<0,NA), #DPI
-                          execrurl = ifelse(!(execrurl %in% c(0,1)),NA,execrurl),
-                          execreg = ifelse(!(execreg %in% c(0,1)),NA,execreg),
-                          reelect = ifelse(!(reelect %in% c(0,1)),NA,reelect),
-                          gov1vote = ifelse(between(gov1vote,0,100),gov1vote,NA),
-                          gov1reg = ifelse(between(gov1reg,0,1),gov1reg,NA),
-                          gov1rurl = ifelse(between(gov1rurl,0,1),gov1rurl,NA),
-                          liec = ifelse(between(liec,1,7),liec,NA),
-                          eiec = ifelse(between(eiec,1,7),eiec,NA),
-                          legelec = ifelse((legelec %in% c(0,1)),legelec,NA),
-                          allhouse = ifelse((allhouse %in% c(0,1)),allhouse,NA),
-                        housesys = ifelse((housesys %in% c("Plurality","PR",".5")),housesys,NA),
-                        housesys=ifelse((housesys == ".5"),"PR",housesys)) %>% 
-    mutate(democ = ifelse(democ %in% c(-88,-77,-66),NA,democ), #Polity
+           execrurl = ifelse(!(execrurl %in% c(0,1)),NA,execrurl),
+           execreg = ifelse(!(execreg %in% c(0,1)),NA,execreg),
+           reelect = ifelse(!(reelect %in% c(0,1)),NA,reelect),
+           gov1vote = ifelse(between(gov1vote,0,100),gov1vote,NA),
+           gov1reg = ifelse(between(gov1reg,0,1),gov1reg,NA),
+           gov1rurl = ifelse(between(gov1rurl,0,1),gov1rurl,NA),
+           liec = ifelse(between(liec,1,7),liec,NA),
+           eiec = ifelse(between(eiec,1,7),eiec,NA),
+           legelec = ifelse((legelec %in% c(0,1)),legelec,NA),
+           allhouse = ifelse((allhouse %in% c(0,1)),allhouse,NA),
+           housesys = ifelse((housesys %in% c("Plurality","PR",".5")),housesys,NA),
+           housesys=ifelse((housesys == ".5"),"PR",housesys),
+           democ = ifelse(democ %in% c(-88,-77,-66),NA,democ), #Polity
            autoc = ifelse(autoc %in% c(-88,-77,-66),NA,autoc),
            polity = ifelse(polity %in% c(-88,-77,-66),NA,polity),
            xconst = ifelse(xconst %in% c(-88,-77,-66),NA,xconst),
@@ -84,14 +87,15 @@ final <- final %>%
            exrec = ifelse(exrec %in% c(-88,-77,-66),NA,exrec),
            exconst = ifelse(exconst %in% c(-88,-77,-66),NA,exconst),
            polcomp = ifelse(polcomp %in% c(-88,-77,-66),NA,polcomp),
-           comp_i = comp_i/100) %>%
+           polity_label = case_when((polity < -5) ~ "Autocracy",
+                                    (polity > 5) ~ "Democracy",
+                                    (between(polity,-5,5)) ~ "Anocracy")) %>%
     group_by(ctr) %>% 
-    fill(c(democ,autoc,polity,xconst,parreg,parcomp,exrec,exconst,polcomp))
-
-final <- final %>% mutate(polity_label = case_when((polity < -5) ~ "Autocracy",
-                                                   (polity > 5) ~ "Democracy",
-                                                   (between(polity,-5,5)) ~ "Anocracy"))
-
-#final <- final %>% filter(!(comp_ii < 0.5 & comp_i>comp_ii*2+0.01))
+    fill(c(democ,autoc,polity,xconst,parreg,parcomp,exrec,exconst,polcomp)) %>% 
+    mutate(comp_i = comp_i^2) %>% 
+    filter(ctr_n!="Chile") %>% 
+    left_join(vdem) %>%
+    mutate(target = ifelse(v2x_polyarchy>0.5 & v2xnp_client>0.2,1,0)) %>% 
+    left_join(clea_nat)
 
 #save(final,file="../data/processed/final.RData")
